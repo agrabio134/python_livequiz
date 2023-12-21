@@ -1,0 +1,23 @@
+<!-- waiting_room_user.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waiting Room</title>
+</head>
+<body>
+    <h1>Waiting Room</h1>
+    <p>Room Number: {{ room_number }}</p>
+    
+    <p>Waiting for the quiz master to start the quiz...</p>
+
+    <p>Participants:</p>
+    <ul>
+        {% for participant in participants %}
+            <li>{{ participant }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

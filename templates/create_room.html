@@ -1,0 +1,95 @@
+<!-- create_room.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Quiz Room</title>
+    <script>
+        function addQuestion() {
+            var questionContainer = document.getElementById('question-container');
+            var newQuestion = document.createElement('div');
+            var questionIndex = questionContainer.children.length;
+
+            newQuestion.innerHTML = `
+                <label for="question">Question:</label>
+                <input type="text" name="questions[]" required>
+                <br>
+                <label for="options">Options:</label>
+                <div class="options-container" id="options-container-${questionIndex}">
+                    <div>
+                        <input type="text" name="options[${questionIndex}][]" placeholder="Option 1" required>
+                        <input type="radio" name="correct_answer[${questionIndex}]" value="0" required> Correct Answer
+                        <button type="button" onclick="removeOption(this, ${questionIndex})">Remove Option</button>
+                    </div>
+                    <div>
+                        <input type="text" name="options[${questionIndex}][]" placeholder="Option 2" required>
+                        <input type="radio" name="correct_answer[${questionIndex}]" value="1" required> Correct Answer
+                        <button type="button" onclick="removeOption(this, ${questionIndex})">Remove Option</button>
+                    </div>
+                    <!-- Add more options as needed -->
+                </div>
+                <button type="button" onclick="addOption(${questionIndex})">Add Option</button>
+                <br>
+                <button type="button" onclick="removeQuestion(this)">Remove Question</button>
+                <hr>
+            `;
+
+            questionContainer.appendChild(newQuestion);
+        }
+
+        function addOption(questionIndex) {
+            var optionsContainer = document.getElementById(`options-container-${questionIndex}`);
+            var newOptionContainer = document.createElement('div');
+            var optionIndex = optionsContainer.children.length;
+
+            newOptionContainer.innerHTML = `
+                <input type="text" name="options[${questionIndex}][]" placeholder="New Option" required>
+                <input type="radio" name="correct_answer[${questionIndex}]" value="${optionIndex}" required> Correct Answer
+                <button type="button" onclick="removeOption(this, ${questionIndex})">Remove Option</button>
+            `;
+
+            optionsContainer.appendChild(newOptionContainer);
+        }
+
+        function removeQuestion(button) {
+            var questionContainer = document.getElementById('question-container');
+            questionContainer.removeChild(button.parentElement);
+        }
+
+        function removeOption(button, questionIndex) {
+            var optionsContainer = document.getElementById(`options-container-${questionIndex}`);
+            optionsContainer.removeChild(button.parentElement);
+        }
+    </script>
+</head>
+<body>
+    <h1>Create Quiz Room</h1>
+    {% if room_number %}
+        <p>Room Number: {{ room_number }}</p>
+    {% endif %}
+    <form method="POST" action="{{ url_for('create_room') }}">
+        <label for="quiz_name">Quiz Name:</label>
+        <input type="text" name="quiz_name" required>
+        <br>
+        <div id="category-container">
+            <label for="category">Category:</label>
+            <input type="text" name="categories" required>
+            <br>
+        </div>
+        <br>
+        <label for="quiz_difficulty">Quiz Difficulty:</label>
+        <input type="radio" name="quiz_difficulty" value="easy" required> Easy
+        <input type="radio" name="quiz_difficulty" value="medium" required> Medium
+        <input type="radio" name="quiz_difficulty" value="hard" required> Hard
+        <br>
+        <div id="question-container">
+            <!-- Your dynamic question and option fields -->
+        </div>
+        <button type="button" onclick="addQuestion()">Add Question</button>
+        <br>
+        <input type="submit" value="Create Room">
+    </form>
+</body>
+</html>

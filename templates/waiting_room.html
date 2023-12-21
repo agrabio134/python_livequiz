@@ -1,0 +1,27 @@
+<!-- waiting_room.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waiting Room</title>
+</head>
+<body>
+    <h1>Waiting Room</h1>
+    <p>Room Number: {{ room_number }}</p>
+
+    {% if is_quiz_master %}
+        <form method="POST" action="{{ url_for('start_quiz', room_number=room_number) }}">
+            <input type="submit" value="Start Quiz">
+        </form>
+    {% endif %}
+
+    <p>Participants:</p>
+    <ul>
+        {% for participant in participants %}
+            <li>{{ participant }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

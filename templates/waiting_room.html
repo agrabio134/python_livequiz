@@ -2,26 +2,123 @@
 
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/sweetalert2@11.1.0/dist/sweetalert2.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.1.0/dist/sweetalert2.all.min.js"></script>
     <title>Waiting Room</title>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Waiting Room</h1>
     <p>Room Number: {{ room_number }}</p>
 
     {% if is_quiz_master %}
-        <form method="POST" action="{{ url_for('start_quiz', room_number=room_number) }}">
-            <input type="submit" value="Start Quiz">
-        </form>
+    <form
+      method="POST"
+      action="{{ url_for('start_quiz', room_number=room_number) }}"
+    >
+      <input type="submit" value="Start Quiz" />
+    </form>
     {% endif %}
 
     <p>Participants:</p>
-    <ul>
-        {% for participant in participants %}
-            <li>{{ participant }}</li>
-        {% endfor %}
+    <ul id="participants-list">
+      {% for participant in participants %}
+      <li>
+        {{ participant }} {% if is_quiz_master %}
+        <!-- <button onclick="kickUser('{{ room_number }}', '{{ participant }}')">Kick</button> -->
+        {% endif %}
+      </li>
+      {% endfor %}
     </ul>
-</body>
+  </body>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+  <script>
+    var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+    socket.on('participant_joined', function(data) {
+        // Update the participants list when a new participant joins
+        var participantsList = document.getElementById('participants-list');
+        var listItem = document.createElement('li');
+        listItem.textContent = data.participant;
+        participantsList.appendChild(listItem);
+    });
+
+    // Fetch updated participants data every 5 seconds (adjust the interval as needed)
+    setInterval(function() {
+        updateParticipantsList();
+    }, 500);  // 5000 milliseconds = 5 seconds
+
+    // Function to fetch updated participants data via AJAX
+    function updateParticipantsList() {
+        var request = new XMLHttpRequest();
+        request.open('GET', '/get_participants/{{ room_number }}');
+        request.onload = function() {
+            var data = JSON.parse(request.responseText);
+            var participantsList = document.getElementById('participants-list');
+            participantsList.innerHTML = '';
+            for (var i = 0; i < data.participants.length; i++) {
+                var listItem = document.createElement('li');
+                listItem.textContent = data.participants[i];
+
+                // Include the kick button HTML
+                {% if is_quiz_master %}
+                    listItem.innerHTML += ' <button onclick="kickUser(\'{{ room_number }}\', \'' + data.participants[i] + '\')">Kick</button>';
+                {% endif %}
+
+                participantsList.appendChild(listItem);
+            }
+        };
+        request.send();
+    }
+
+    socket.on('user_kicked', function(data) {
+        alert(data.message);
+        // Optionally, you can redirect the user to a different page or take other actions.
+    });
+
+    // Function to kick a user with confirmation
+    function kickUser(room_number, username) {
+        // Display a confirmation dialog
+        Swal.fire({
+            title: 'Are you sure?',
+            text: `Do you want to kick ${username}?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, kick them!',
+            cancelButtonText: 'No, cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // User confirmed, send the kick request
+                sendKickRequest(room_number, username);
+            }
+        });
+    }
+
+    // Function to send the kick request
+    function sendKickRequest(room_number, username) {
+        var request = new XMLHttpRequest();
+        request.open('POST', '/kick_user/' + room_number + '/' + username);
+        request.onload = function() {
+            var data = JSON.parse(request.responseText);
+            if (data.success) {
+                // Optional: Handle success, update participants list if needed
+                updateParticipantsList();
+            } else {
+                alert(data.message);
+            }
+        };
+        request.send();
+    }
+
+    socket.on('quiz_started', function() {
+        // Redirect both quiz master and participants to the quiz room
+        window.location.href = '/quiz_room/{{ room_number }}';
+    });
+  </script>
 </html>

@@ -2,22 +2,125 @@
 
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/sweetalert2@11.1.0/dist/sweetalert2.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.1.0/dist/sweetalert2.all.min.js"></script>
     <title>Waiting Room</title>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Waiting Room</h1>
     <p>Room Number: {{ room_number }}</p>
-    
+
     <p>Waiting for the quiz master to start the quiz...</p>
 
     <p>Participants:</p>
-    <ul>
-        {% for participant in participants %}
-            <li>{{ participant }}</li>
-        {% endfor %}
+    <ul id="participants-list">
+      {% for participant in participants %}
+      <li>{{ participant }}</li>
+      {% endfor %}
     </ul>
-</body>
+
+    <!-- SocketIO script to handle 'participant_joined' event -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+      var socket = io.connect(
+        "http://" + document.domain + ":" + location.port
+      );
+      var username = "{{ session.username }}"; // Assuming you have access to the username in the session
+
+      socket.on("participant_joined", function (data) {
+        // Update the participants list when a new participant joins
+        var participantsList = document.getElementById("participants-list");
+        var listItem = document.createElement("li");
+        listItem.textContent = data.participant;
+        participantsList.appendChild(listItem);
+      });
+
+      // Fetch updated participants data every 5 seconds (adjust the interval as needed)
+
+      var intervalId = setInterval(function () {
+        updateParticipantsList();
+        checkIfQuizStarted();
+      }, 500);
+
+      function checkIfQuizStarted() {
+        var request = new XMLHttpRequest();
+        request.open("GET", "/check_if_quiz_started/{{ room_number }}");
+        request.onload = function () {
+          var data = JSON.parse(request.responseText);
+          console.log(data);
+
+          if (data.is_started) {
+            clearInterval(intervalId); // Stop the interval
+
+            console.log("Quiz started. Redirecting...");
+
+            // Display countdown using SweetAlert2
+            let count = 3; // Set the initial countdown value
+            const interval = setInterval(() => {
+              Swal.fire({
+                title: `Quiz starting in ${count}`,
+                timer: 1000, // Set the timer interval for each count (in milliseconds)
+                showConfirmButton: false,
+              });
+
+              count--;
+
+              if (count < 0) {
+                clearInterval(interval); // Stop the interval
+                // Redirect to the quiz room
+                window.location.href = "/quiz_room/{{ room_number }}";
+              }
+            }, 1000);
+          }
+        };
+        request.send();
+      }
+
+      // Function to fetch updated participants data via AJAX
+      function updateParticipantsList() {
+        var request = new XMLHttpRequest();
+        request.open("GET", "/get_participants/{{ room_number }}");
+        request.onload = function () {
+          var data = JSON.parse(request.responseText);
+          var participantsList = document.getElementById("participants-list");
+          participantsList.innerHTML = "";
+          for (var i = 0; i < data.participants.length; i++) {
+            var listItem = document.createElement("li");
+            listItem.textContent = data.participants[i];
+            participantsList.appendChild(listItem);
+          }
+          //   console.log(data);
+
+          // Check if the quiz has started
+
+          // Check if the user's username is still in the participants list
+          if (!data.participants.includes(username)) {
+            // Trigger the kick alert and redirect back to the 'join_room' page
+            clearInterval(intervalId); // Stop the interval
+
+            Swal.fire({
+              title: "You have been kicked.",
+              icon: "warning",
+              confirmButtonText: "OK",
+            }).then(() => {
+              window.location.href = "/join_room";
+            });
+          }
+        };
+        request.send();
+      }
+
+      socket.on("quiz_started", function () {
+        console.log("Quiz started. Redirecting...");
+        // Redirect both quiz master and participants to the quiz room
+        window.location.href = "/quiz_room/{{ room_number }}";
+      });
+    </script>
+  </body>
 </html>

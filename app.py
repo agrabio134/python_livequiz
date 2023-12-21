@@ -1,14 +1,42 @@
-# app.py
+from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_pymongo import PyMongo
 from flask_socketio import SocketIO
 import uuid
+import secrets
+import jwt
+from datetime import datetime, timedelta
+from flask import jsonify
+
 
 app = Flask(__name__)
 app.config['MONGO_URI'] = 'mongodb+srv://testonlytest7:76HdaZzXXgSqb4HN@learnapi.ftvefwf.mongodb.net/db_quizz_app?retryWrites=true&w=majority'
 app.secret_key = 'your_secret_key'
 mongo = PyMongo(app)
 socketio = SocketIO(app)
+
+secret_key = secrets.token_hex(32)
+app.config['JWT_SECRET_KEY'] = secret_key
+
+
+
+def generate_jwt_token(username):
+    payload = {
+        'exp': datetime.utcnow() + timedelta(days=1),
+        'iat': datetime.utcnow(),
+        'sub': username
+    }
+    token = jwt.encode(payload, app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    return token
+    
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'username' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/')
 def home():
@@ -20,25 +48,34 @@ def signup():
         fullname = request.form['fullname']
         username = request.form['username']
         password = request.form['password']
-        country = request.form['country']
-
         user_signup = mongo.db.userSignup
-        user_signup.insert_one({'FULLNAME': fullname, 'USERNAME': username, 'PASSWORD': password, 'COUNTRY': country})
-        
+        user_signup.insert_one({'FULLNAME': fullname, 'USERNAME': username, 'PASSWORD': password})
         return redirect(url_for('login'))
 
     return render_template('signup.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    # return redirect(url_for('login'))
+    return redirect(url_for('login'))
+
+
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        user_data = mongo.db.userSignup.find_one({'USERNAME': username, 'PASSWORD': password})
 
-        user_data = mongo.db.userSignup.count_documents({'USERNAME': username, 'PASSWORD': password})
-        if user_data > 0:
-            session['username'] = username
-            return redirect(url_for('menu'))
+        if user_data:
+            token = generate_jwt_token(username)
+            session['username'] = username  # Set the username in the session
+            response = redirect(url_for('menu'))
+            response.set_cookie('token', token)
+            return response
         else:
             error = "Wrong Username or Password!"
             return render_template('login.html', error=error)
@@ -46,20 +83,45 @@ def login():
     return render_template('login.html')
 
 @app.route('/menu', methods=['GET', 'POST'])
+@login_required
 def menu():
-    if 'username' in session:
-        if request.method == 'POST':
-            role = request.form.get('role')
-            if role == 'quiz_master':
-                return redirect(url_for('create_room'))
-            elif role == 'quiz_participant':
-                return redirect(url_for('join_room'))
+    if request.method == 'POST':
+        role = request.form.get('role')
+        if role == 'quiz_master':
+            return redirect(url_for('create_room'))
+        elif role == 'quiz_participant':
+            return redirect(url_for('join_room'))
 
-        return render_template('menu.html')
+    return render_template('menu.html')
 
-    return redirect(url_for('login'))
+@app.route('/kick_user/<room_number>/<username>', methods=['POST'])
+@login_required
+def kick_user(room_number, username):
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    quiz_master = room_data['quiz_master']
+
+    if session['username'] == quiz_master:
+        participants = room_data.get('participants', [])
+        if username in participants:
+            participants.remove(username)
+
+            # Update the room with the modified participants list
+            mongo.db.quiz_rooms.update_one(
+                {'room_number': room_number},
+                {'$set': {'participants': participants}}
+            )
+
+            # Notify the kicked user via SocketIO
+            socketio.emit('user_kicked', {'message': 'You have been kicked from the room.'}, room=username)
+
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'message': 'User not found in the room.'})
+    else:
+        return jsonify({'success': False, 'message': 'Only the quiz master can kick users.'})
 
 @app.route('/create_room', methods=['GET', 'POST'])
+@login_required
 def create_room():
     room_number = None
 
@@ -78,7 +140,9 @@ def create_room():
             'categories': categories,
             'quiz_difficulty': quiz_difficulty,
             'quiz_master': session.get('username'),
-            'questions': []
+            'questions': [],
+            'participants': [],
+            'is_started': False  # Add the flag to indicate whether the quiz has started
         }
 
         for i in range(len(questions)):
@@ -89,9 +153,6 @@ def create_room():
             }
             room_data['questions'].append(question)
 
-        # Add participants key to room_data
-        room_data['participants'] = []
-
         mongo.db.quiz_rooms.insert_one(room_data)
 
         return redirect(url_for('waiting_room', room_number=room_number))
@@ -100,107 +161,120 @@ def create_room():
 
 
 @app.route('/waiting_room/<room_number>', methods=['GET', 'POST'])
+@login_required
 def waiting_room(room_number):
     print(f"Waiting room accessed. room_number: {room_number}")
-    if 'username' in session:
-        # Use count_documents to check if the room exists
-        room_count = mongo.db.quiz_rooms.count_documents({'room_number': room_number})
+    room_count = mongo.db.quiz_rooms.count_documents({'room_number': room_number})
 
-        if room_count > 0:
-            room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    if room_count > 0:
+        room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+        is_quiz_master = session['username'] == room_data['quiz_master']
 
-            is_quiz_master = session['username'] == room_data['quiz_master']
+        print(f"Room {room_number} found. is_quiz_master: {is_quiz_master}")
 
-            print(f"Room {room_number} found. is_quiz_master: {is_quiz_master}")
+        if request.method == 'POST' and is_quiz_master:
+            socketio.emit('quiz_started', room=room_number)
+            return redirect(url_for('quiz_room', room_number=room_number))
+        elif request.method == 'POST':
+            error = "Only the quiz master can start the quiz."
+            return render_template('waiting_room.html', room_number=room_number, is_quiz_master=is_quiz_master, participants=participants, error=error)
 
-            if request.method == 'POST' and is_quiz_master:
-                socketio.emit('quiz_started', room=room_number)  # Notify clients that the quiz has started
-                return redirect(url_for('quiz_room', room_number=room_number))
-            elif request.method == 'POST':
-                # Participant tried to start the quiz, show an error or redirect to a different page
-                error = "Only the quiz master can start the quiz."
-                return render_template('waiting_room.html', room_number=room_number, is_quiz_master=is_quiz_master, participants=participants, error=error)
+        participants = room_data.get('participants', [])
+        return render_template('waiting_room.html', room_number=room_number, is_quiz_master=is_quiz_master, participants=participants)
 
-            # Check if 'participants' key exists in room_data
-            participants = room_data.get('participants', [])
-
-            return render_template('waiting_room.html', room_number=room_number, is_quiz_master=is_quiz_master, participants=participants)
-
-        else:
-            print(f"Room {room_number} not found. room_count: {room_count}")
-            return render_template('room_not_found.html')  # Create a room_not_found.html template
-
-    return redirect(url_for('login'))
+    else:
+        print(f"Room {room_number} not found. room_count: {room_count}")
+        return render_template('room_not_found.html')
 
 @app.route('/waiting_room_user/<room_number>', methods=['GET', 'POST'])
+@login_required
 def waiting_room_user(room_number):
-    if 'username' in session:
-        room_count = mongo.db.quiz_rooms.count_documents({'room_number': room_number})
+    room_count = mongo.db.quiz_rooms.count_documents({'room_number': room_number})
 
-        if room_count > 0:
-            room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    if room_count > 0:
+        room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+        is_quiz_master = session['username'] == room_data['quiz_master']
 
-            is_quiz_master = session['username'] == room_data['quiz_master']
-
-            if request.method == 'POST' and is_quiz_master:
-                socketio.emit('quiz_started', room=room_number)
-                return redirect(url_for('quiz_room', room_number=room_number))
-            elif request.method == 'POST':
-                error = "Only the quiz master can start the quiz."
-                return render_template('waiting_room_user.html', room_number=room_number, is_quiz_master=is_quiz_master, participants=participants, error=error)
-            
-            participants = room_data.get('participants', [])
-
-            return render_template('waiting_room_user.html', room_number=room_number, is_quiz_master=is_quiz_master, participants=participants)
+        if request.method == 'POST' and is_quiz_master:
+            socketio.emit('quiz_started', room=room_number)
+            return redirect(url_for('quiz_room', room_number=room_number))
+        elif request.method == 'POST':
+            error = "Only the quiz master can start the quiz."
+            return render_template('waiting_room_user.html', room_number=room_number, is_quiz_master=is_quiz_master, participants=room_data.get('participants', []), error=error)
         
-        else:
-            return render_template('room_not_found.html')
-        
-    return redirect(url_for('login'))
+        participants = room_data.get('participants', [])
+        return render_template('waiting_room_user.html', room_number=room_number, is_quiz_master=is_quiz_master, participants=participants)
+    
+    else:
+        return render_template('room_not_found.html')
+    
+@app.route('/check_if_quiz_started/<room_number>')
+def check_if_quiz_started(room_number):
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    is_started = room_data.get('is_started', False)
+    return jsonify({'is_started': is_started})
 
+@app.route('/get_participants/<room_number>')
+def get_participants(room_number):
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    participants = room_data.get('participants', [])
+    return jsonify({'participants': participants})
 
-
-
-
-
-@app.route('/start_quiz/<int:room_number>', methods=['POST'])
+@app.route('/start_quiz/<room_number>', methods=['POST'])
+@login_required
 def start_quiz(room_number):
-    socketio.emit('quiz_started', room=room_number)
-    return redirect(url_for('quiz_room', room_number=room_number))
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    quiz_master = room_data['quiz_master']
+
+    if session['username'] == quiz_master:
+        # Update the flag to indicate that the quiz has started
+        mongo.db.quiz_rooms.update_one(
+            {'room_number': room_number},
+            {'$set': {'is_started': True}}
+        )
+
+        socketio.emit('quiz_started', room=room_number)
+        return redirect(url_for('quiz_room', room_number=room_number))
+    else:
+        return jsonify({'success': False, 'message': 'Only the quiz master can start the quiz.'})
+
 
 @app.route('/join_room', methods=['GET', 'POST'])
+@login_required
 def join_room():
-    if 'username' in session:
-        if request.method == 'POST':
-            room_number = request.form['room_number']
-            room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
-
-            if room_data:
-                participants = room_data.get('participants', [])
-                participants.append(session['username'])
-
-                mongo.db.quiz_rooms.update_one(
-                    {'room_number': room_number},
-                    {'$set': {'participants': participants}}
-                )
-
-                return redirect(url_for('waiting_room_user', room_number=room_number))
-            else:
-                error = "Invalid Room Number. Please try again."
-                return render_template('join_room.html', error=error)
-
-        return render_template('join_room.html')
-
-    return redirect(url_for('login'))
-
-@app.route('/quiz_room/<int:room_number>')
-def quiz_room(room_number):
-    if 'username' in session:
+    if request.method == 'POST':
+        room_number = request.form['room_number']
         room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
 
         if room_data:
-            quiz_master = room_data['quiz_master']
-            return render_template('quiz_room.html', room_number=room_number, quiz_master=quiz_master)
+            participants = room_data.get('participants', [])
+            new_participant = session['username']
+            participants.append(new_participant)
+
+            mongo.db.quiz_rooms.update_one(
+                {'room_number': room_number},
+                {'$set': {'participants': participants}}
+            )
+
+            # Emit event to notify other clients about the new participant
+            socketio.emit('participant_joined', {'participant': new_participant, 'room_number': room_number}, room=room_number)
+
+            return redirect(url_for('waiting_room_user', room_number=room_number))
+        else:
+            error = "Invalid Room Number. Please try again."
+            return render_template('join_room.html', error=error)
+
+    return render_template('join_room.html')
+
+
+@app.route('/quiz_room/<room_number>')
+@login_required
+def quiz_room(room_number):
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+
+    if room_data:
+        quiz_master = room_data['quiz_master']
+        return render_template('quiz_room.html', room_number=room_number, quiz_master=quiz_master)
 
     return redirect(url_for('login'))
 

@@ -7,6 +7,8 @@
 </head>
 <body>
     <h1>Welcome to Quiz Menu</h1>
+    <!-- logout -->
+    <a href="{{ url_for('logout') }}" onclick="logout()">Logout</a>
     <form method="POST">
         <label for="role">Select your role:</label>
         <select id="role" name="role">
@@ -17,3 +19,24 @@
     </form>
 </body>
 </html>
+
+<script>
+    function logout() {
+        // Clear the session storage
+        sessionStorage.clear();
+    
+        // Clear cookies
+        let cookies = document.cookie.split(";");
+    
+        for (let i = 0; i < cookies.length; i++) {
+            let cookie = cookies[i];
+            let eqPos = cookie.indexOf("=");
+            let name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+        }
+    
+        // Redirect to the login page or any other desired destination
+        // window.location.href = '/login';  // Change '/login' to your actual login route
+    }
+    </script>
+    

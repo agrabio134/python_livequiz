@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+
     <title>Login</title>
+    
 </head>
 <body>
     <h1>Quiz App Login</h1>
@@ -16,8 +19,22 @@
 
         <input type="submit" value="Login">
     </form>
+    <p>Don't have an account? <a href="{{ url_for('signup') }}">Sign Up</a></p>
     {% if error %}
         <p>{{ error }}</p>
     {% endif %}
 </body>
+
 </html>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+    // Check if there is a session in session storage
+    const username = sessionStorage.getItem('token');
+
+    // If a session is present, redirect to the menu page or another appropriate destination
+    if (username) {
+        window.location.href = '/menu';  // Change '/menu' to your actual menu route
+    }
+});
+</script>

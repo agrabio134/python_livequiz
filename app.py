@@ -7,6 +7,8 @@ import secrets
 import jwt
 from datetime import datetime, timedelta
 from flask import jsonify
+from bson import ObjectId
+
 
 
 app = Flask(__name__)
@@ -267,6 +269,92 @@ def join_room():
     return render_template('join_room.html')
 
 
+@app.route('/submit_answers/<room_number>', methods=['POST'])
+@login_required
+def submit_answers(room_number):
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+
+    if room_data:
+        participant = session['username']
+        answers = {}
+
+        for question_index, question in enumerate(room_data['questions']):
+            answer_key = f'answer_{question_index}'
+            selected_option = request.form.get(answer_key)
+            answers[str(question_index)] = selected_option  # Convert the key to string
+
+        # Store the participant's answers in the database
+        answers_collection = mongo.db.participant_answers
+        answers_collection.update_one(
+            {'room_number': room_number, 'participant': participant},
+            {'$set': {'answers': answers}},
+            upsert=True  # Create a new document if not found
+        )
+        print(f"Participant {participant} submitted answers: {answers}")
+
+        return redirect(url_for('quiz_results', room_number=room_number))
+
+    return redirect(url_for('login'))
+
+@app.route('/quiz_results/<room_number>')
+@login_required
+def quiz_results(room_number):
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+
+    if room_data:
+        # Retrieve participant's submitted answers
+        participant_answers = get_participant_answers(room_number, session['username'])
+
+        username = session['username']
+        score = calculate_score(participant_answers, room_data['questions'])
+
+        return render_template('quiz_results.html', room_number=room_number, score=score, username=username, participant_answers=participant_answers)
+
+    return redirect(url_for('login'))
+
+@login_required
+def quiz_results(room_number):
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+
+    if room_data:
+        # Retrieve participant's submitted answers (replace this with your actual logic)
+        participant_answers = get_participant_answers(room_number, session['username'])
+
+        username = session['username']  
+        score = calculate_score(participant_answers, room_data['questions'])
+
+        return render_template('quiz_results.html', room_number=room_number, score=score, username=username)
+
+    return redirect(url_for('login'))
+
+
+def get_participant_answers(room_number, participant):
+    answers_collection = mongo.db.participant_answers
+
+    # Retrieve participant's answers based on room number and participant username
+    participant_answers = answers_collection.find_one({'room_number': room_number, 'participant': participant})
+
+    if participant_answers:
+        answers = participant_answers.get('answers', {})
+        # Sort the answers by question 
+        sorted_answers = {k: answers[k] for k in sorted(answers, key=int)}
+
+        return sorted_answers
+    else:
+        return {}
+
+
+def calculate_score(participant_answers, questions):
+    score = 0
+    for index, question in enumerate(questions):
+        correct_answer = question['options'][question['correct_answer']]
+        participant_answer = participant_answers.get(f'answer_{index}')
+
+        if participant_answer == correct_answer:
+            score += 1
+
+    return score
+# In your Flask route for the quiz_room
 @app.route('/quiz_room/<room_number>')
 @login_required
 def quiz_room(room_number):
@@ -274,9 +362,10 @@ def quiz_room(room_number):
 
     if room_data:
         quiz_master = room_data['quiz_master']
-        return render_template('quiz_room.html', room_number=room_number, quiz_master=quiz_master)
+        return render_template('quiz_room.html', room_number=room_number, quiz_master=quiz_master, room_data=room_data)
 
     return redirect(url_for('login'))
+
 
 if __name__ == '__main__':
     socketio.run(app, debug=True)

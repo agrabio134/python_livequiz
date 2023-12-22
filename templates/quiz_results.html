@@ -1,0 +1,30 @@
+<!-- quiz_results.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Results</title>
+</head>
+<body>
+    <h1>Quiz Results</h1>
+    <p>Room Number: {{ room_number }}</p>
+    <p>Participant: {{ username }}</p>
+    <p>Score: {{ score }}</p>
+
+    <!-- Display participant's answers -->
+    {% if participant_answers %}
+        <h2>Participant's Answers</h2>
+        <ul>
+            {% for question_number, answer in participant_answers.items() %}
+                <li>
+                    <p>Question {{ question_number }}: {{ answer }}</p>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No answers submitted.</p>
+    {% endif %}
+</body>
+</html>

@@ -4,35 +4,84 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quiz Room</title>
+    <style>
+        .question-container {
+            display: none;
+        }
+
+        .question-container.active {
+            display: block;
+        }
+    </style>
 </head>
 <body>
     <h1>Quiz Room</h1>
     <p>Room Number: {{ room_number }}</p>
     <p>Quiz Master: {{ quiz_master }}</p>
 
-    <!-- Iterate through questions and options -->
-    <form action="{{ url_for('submit_answers', room_number=room_number) }}" method="post">
-        {% if room_data.questions %}
-            <h2>Quiz Questions</h2>
-            <ul>
-                {% for question in room_data.questions %}
-                    <li>
-                        <p>{{ question.question_text }}</p>
-                        <ul>
-                            {% for option in question.options %}
-                                <li>
-                                    <!-- Use name="answer_{{ loop.index0 }}" to start from 0 -->
-                                    <input type="radio" name="answer_{{ loop.index0 }}" value="{{ option }}"> {{ option }}
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    </li>
+    <!-- Fetch questions from the room_data variable -->
+    {% if room_data.questions %}
+        <h2>{{ room_data.quiz_name }} </h2>
+        <h3>Category: {{ room_data.categories }}</h3>
+        <form action="{{ url_for('submit_answers', room_number=room_number) }}" method="post" id="quizForm">
+        <input type="hidden" name="participant" value="{{ session['username'] }}">
+
+
+
+        {% for question_index in range(room_data.questions|length) %}
+            {% set question = room_data.questions[question_index] %}
+            <div class="question-container {% if question_index == 0 %}active{% endif %}" data-index="{{ question_index }}">
+                <h3>Question {{ question_index + 1 }}</h3>
+                <p>{{ question.question_text }}</p>
+
+                {% for option_index in range(question.options|length) %}
+                    {% set option = question.options[option_index] %}
+                    <p>
+                        <input type="radio" name="answer_{{ question_index }}" value="{{ option }}"> {{ option }}
+                    </p>
                 {% endfor %}
-            </ul>
-            <button type="submit">Submit Answers</button>
-        {% else %}
-            <p>No quiz questions available.</p>
-        {% endif %}
+            </div>
+        {% endfor %}
+
+        <button type="button" onclick="showBack()">Back</button>
+        <button type="button" onclick="showNext()" class="nextBtn">Next</button>
+        <button type="submit" style="display: none;">Submit Answers</button>
     </form>
+    {% else %}
+        <p>No quiz questions available.</p>
+    {% endif %}
+
+    <script>
+        function showNext() {
+            const currentQuestionIndex = document.querySelector('.question-container.active').getAttribute('data-index');
+            const nextQuestionIndex = parseInt(currentQuestionIndex) + 1;
+            const nextQuestionContainer = document.querySelector(`.question-container[data-index="${nextQuestionIndex}"]`);
+
+            if (nextQuestionContainer) {
+                document.querySelector('.question-container.active').classList.remove('active');
+                nextQuestionContainer.classList.add('active');
+            } else {
+                // If there are no more questions, show the submit button
+                document.querySelector('[type="submit"]').style.display = 'inline-block';
+                document.querySelector('.nextBtn').style.display = 'none';
+            }
+        }
+
+        function showBack() {
+            const currentQuestionIndex = document.querySelector('.question-container.active').getAttribute('data-index');
+            const previousQuestionIndex = parseInt(currentQuestionIndex) - 1;
+            const previousQuestionContainer = document.querySelector(`.question-container[data-index="${previousQuestionIndex}"]`);
+
+            if (previousQuestionContainer) {
+                document.querySelector('.question-container.active').classList.remove('active');
+                previousQuestionContainer.classList.add('active');
+                // Hide the submit button
+                document.querySelector('[type="submit"]').style.display = 'none';
+                document.querySelector('.nextBtn').style.display = 'inline-block';
+            } else {
+                    
+            }
+        }
+    </script>
 </body>
 </html>

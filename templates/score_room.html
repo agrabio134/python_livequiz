@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Score Room</title>
+</head>
+<body>
+    <h1>Quiz Score Room - Room {{ room_number }}</h1>
+
+    <h2>Quiz Results</h2>
+
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Participant</th>
+                <th>Score</th>
+                <th>Answers</th>
+            </tr>
+        </thead>
+        <tbody id="quizResults">
+            <!-- The quiz results will be dynamically inserted here -->
+        </tbody>
+    </table>
+
+    <!-- Add this script to your score_room.html file -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.1.3/socket.io.js"></script>
+    <script>
+        var socket = io.connect('http://' + document.domain + ':' + location.port);
+        var room_number = '{{ room_number }}';  // Make sure to have room_number available
+
+        function updateQuizResults() {
+            fetch('/get_scores/' + room_number)
+                .then(response => response.json())
+                .then(data => {
+                    // Get the tbody element to insert rows
+                    var quizResultsTableBody = document.getElementById('quizResults');
+
+                    // Clear existing rows
+                    quizResultsTableBody.innerHTML = '';
+
+                    // Iterate through the results and generate HTML rows
+                    for (var participant in data.scores) {
+                        if (data.scores.hasOwnProperty(participant)) {
+                            var result = data.scores[participant];
+
+                            // Create a new row
+                            var participantRow = quizResultsTableBody.insertRow();
+
+                            // Insert cells for participant name, score, and answers
+                            var participantNameCell = participantRow.insertCell(0);
+                            var scoreCell = participantRow.insertCell(1);
+                            var answersCell = participantRow.insertCell(2);
+
+                            // Populate cells with data
+                            participantNameCell.innerText = participant;
+                            scoreCell.innerText = result.score;
+
+                            // Generate the answers HTML
+                            var answersList = document.createElement('ul');
+                            for (var questionIndex in result.answers) {
+                                if (result.answers.hasOwnProperty(questionIndex)) {
+                                    var answerItem = document.createElement('li');
+                                    answerItem.innerHTML = '<strong>Question ' + (parseInt(questionIndex) + 1) + ':</strong> ' + result.answers[questionIndex];
+                                    answersList.appendChild(answerItem);
+                                }
+                            }
+                            answersCell.appendChild(answersList);
+                        }
+                    }
+                })
+                .catch(error => console.error('Error updating scores:', error));
+        }
+
+        // Initial update
+        updateQuizResults();
+
+        // Update every 1 second
+        setInterval(updateQuizResults, 1000);
+
+        // ... your existing socket.on('update_scores') code here
+    </script>
+</body>
+</html>

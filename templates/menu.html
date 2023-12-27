@@ -1,42 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Menu</title>
-</head>
-<body>
+
+    <!-- Add SweetAlert library -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  </head>
+  <body>
     <h1>Welcome to Quiz Menu</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %} {% if
+    messages %}
+    <script>
+                      // Use SweetAlert to display flash messages
+                      {% for category, message in messages %}
+                      Swal.fire({
+        icon: "{{ category }}", // Use the message category as the SweetAlert icon
+        title: "{{ category.capitalize() }}",
+        text: "{{ message }}",
+        showConfirmButton: true,
+        timerProgressBar: true, // Display a progress bar
+        timer: 3000, // Adjust the timer as needed
+        didOpen: (toast) => {
+          const progressBar = toast.querySelector('.swal2-progress-bar');
+          const timerInterval = setInterval(() => {
+            const value = progressBar.getAttribute('aria-valuenow');
+            progressBar.style.width = `${value}%`;
+          }, 100);
+          toast.addEventListener('mouseenter', () => clearInterval(timerInterval));
+          toast.addEventListener('mouseleave', () => timerInterval);
+        }
+      });
+
+
+                      {% endfor %}
+    </script>
+    {% endif %} {% endwith %}
+
     <!-- logout -->
     <a href="{{ url_for('logout') }}" onclick="logout()">Logout</a>
     <form method="POST">
-        <label for="role">Select your role:</label>
-        <select id="role" name="role">
-            <option value="quiz_master">Quiz Master</option>
-            <option value="quiz_participant">Quiz Participant</option>
-        </select>
-        <button type="submit">Start</button>
+      <label for="role">Select your role:</label>
+      <select id="role" name="role">
+        <option value="quiz_master">Quiz Master</option>
+        <option value="quiz_participant">Quiz Participant</option>
+      </select>
+      <button type="submit">Start</button>
     </form>
-</body>
-</html>
 
-<script>
-    function logout() {
+    <script>
+      function logout() {
         // Clear the session storage
         sessionStorage.clear();
-    
+
         // Clear cookies
         let cookies = document.cookie.split(";");
-    
+
         for (let i = 0; i < cookies.length; i++) {
-            let cookie = cookies[i];
-            let eqPos = cookie.indexOf("=");
-            let name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-            document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+          let cookie = cookies[i];
+          let eqPos = cookie.indexOf("=");
+          let name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+          document.cookie =
+            name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
         }
-    
+
         // Redirect to the login page or any other desired destination
         // window.location.href = '/login';  // Change '/login' to your actual login route
-    }
+      }
     </script>
-    
+  </body>
+</html>

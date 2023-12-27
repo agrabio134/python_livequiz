@@ -8,6 +8,8 @@ import jwt
 from datetime import datetime, timedelta
 from flask import jsonify
 from bson import ObjectId
+from flask import flash
+
 
 
 
@@ -235,10 +237,25 @@ def start_quiz(room_number):
             {'$set': {'is_started': True}}
         )
 
-        socketio.emit('quiz_started', room=room_number)
-        return redirect(url_for('quiz_room', room_number=room_number))
+        # Redirect the quiz master to a different HTML page (e.g., score room)
+        return redirect(url_for('quiz_results', room_number=room_number))
+    
     else:
         return jsonify({'success': False, 'message': 'Only the quiz master can start the quiz.'})
+
+# Add this route to fetch updated scores
+@app.route('/get_scores/<room_number>')
+def get_scores(room_number):
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    participants = room_data.get('participants', [])
+    scores = {}
+
+    for participant in participants:
+        participant_answers = get_participant_answers(room_number, participant)
+        score = calculate_score(participant_answers, room_data['questions'])
+        scores[participant] = {'score': score, 'answers': participant_answers}
+
+    return jsonify({'scores': scores})
 
 
 @app.route('/join_room', methods=['GET', 'POST'])
@@ -271,8 +288,11 @@ def join_room():
 
 @app.route('/submit_answers/<room_number>', methods=['POST'])
 @login_required
+
 def submit_answers(room_number):
     room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    socketio.emit('update_scores', {'room_number': room_number}, room=room_number)
+
 
     if room_data:
         participant = session['username']
@@ -292,7 +312,23 @@ def submit_answers(room_number):
         )
         print(f"Participant {participant} submitted answers: {answers}")
 
-        return redirect(url_for('quiz_results', room_number=room_number))
+        return redirect(url_for('myscore', room_number=room_number))
+
+    return redirect(url_for('login'))
+
+@app.route('/myscore/<room_number>')
+@login_required
+def myscore(room_number):
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+
+    if room_data:
+        # Retrieve participant's submitted answers
+        participant_answers = get_participant_answers(room_number, session['username'])
+
+        username = session['username']  
+        score = calculate_score(participant_answers, room_data['questions'])
+
+        return render_template('myscore.html', room_number=room_number, score=score, username=username)
 
     return redirect(url_for('login'))
 
@@ -302,15 +338,30 @@ def quiz_results(room_number):
     room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
 
     if room_data:
-        # Retrieve participant's submitted answers
-        participant_answers = get_participant_answers(room_number, session['username'])
+        quiz_master = room_data['quiz_master']
+        current_user = session['username']
 
-        username = session['username']
-        score = calculate_score(participant_answers, room_data['questions'])
+        if current_user != quiz_master:
+            flash('Only the quiz master can view the quiz results.', 'error')
+            return redirect(url_for('menu'))  
 
-        return render_template('quiz_results.html', room_number=room_number, score=score, username=username, participant_answers=participant_answers)
+        # Retrieve participant's submitted answers (replace this with your actual logic)
+        participants = room_data.get('participants', [])
+        results = {}
 
-    return redirect(url_for('login'))
+        for participant in participants:
+            participant_answers = get_participant_answers(room_number, participant)
+            score = calculate_score(participant_answers, room_data['questions'])
+            results[participant] = {'score': score, 'answers': participant_answers}
+
+        # Emit the 'update_scores' event to all clients in the room
+        socketio.emit('update_scores', {'room_number': room_number, 'scores': results}, room=room_number)
+
+        return render_template('score_room.html', room_number=room_number, results=results)
+
+    return render_template('error.html', message='Quiz results not available or room not found')
+
+
 
 @login_required
 def quiz_results(room_number):
@@ -346,14 +397,19 @@ def get_participant_answers(room_number, participant):
 
 def calculate_score(participant_answers, questions):
     score = 0
+
     for index, question in enumerate(questions):
-        correct_answer = question['options'][question['correct_answer']]
-        participant_answer = participant_answers.get(f'answer_{index}')
+        correct_answer_index = question['correct_answer']
+        correct_answer = question['options'][correct_answer_index]
+        participant_answer = participant_answers.get(str(index))
 
         if participant_answer == correct_answer:
             score += 1
 
     return score
+
+
+
 # In your Flask route for the quiz_room
 @app.route('/quiz_room/<room_number>')
 @login_required

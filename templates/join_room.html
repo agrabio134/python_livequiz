@@ -4,8 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Join Room</title>
+    
 </head>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <body>
+
+    {% with messages = get_flashed_messages(with_categories=true) %} {% if
+        messages %}
+        <script>
+                          // Use SweetAlert to display flash messages
+                          {% for category, message in messages %}
+                          Swal.fire({
+            icon: "{{ category }}", // Use the message category as the SweetAlert icon
+            title: "{{ category.capitalize() }}",
+            text: "{{ message }}",
+            showConfirmButton: true,
+            timerProgressBar: true, // Display a progress bar
+            timer: 3000, // Adjust the timer as needed
+            
+            didOpen: (toast) => {
+              const progressBar = toast.querySelector('.swal2-progress-bar');
+              const timerInterval = setInterval(() => {
+                const value = progressBar.getAttribute('aria-valuenow');
+                progressBar.style.width = `${value}%`;
+              }, 100);
+              toast.addEventListener('mouseenter', () => clearInterval(timerInterval));
+              toast.addEventListener('mouseleave', () => timerInterval);
+            }
+          });
+    
+    
+                          {% endfor %}
+        </script>
+        {% endif %} {% endwith %}
+       
+    
     <h1>Join Room</h1>
     <form method="POST">
         <label for="room_number">Room Number:</label>

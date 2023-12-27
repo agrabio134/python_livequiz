@@ -137,6 +137,7 @@ def create_room():
         questions = request.form.getlist('questions[]')
         options = [request.form.getlist(f'options[{i}][]') for i in range(len(questions))]
         correct_answers = [int(request.form[f'correct_answer[{i}]']) for i in range(len(questions))]
+        timer = request.form['quiz_time']
 
         room_data = {
             'room_number': room_number,
@@ -146,7 +147,10 @@ def create_room():
             'quiz_master': session.get('username'),
             'questions': [],
             'participants': [],
-            'is_started': False  # Add the flag to indicate whether the quiz has started
+            'is_started': False,
+            'timer': timer,
+            'status': 'active'
+
         }
 
         for i in range(len(questions)):
@@ -162,6 +166,19 @@ def create_room():
         return redirect(url_for('waiting_room', room_number=room_number))
 
     return render_template('create_room.html', room_number=room_number)
+
+@app.route('/update_quiz_status/<room_number>', methods=['POST'])
+@login_required
+def update_quiz_status(room_number):
+    if request.method == 'POST':
+        new_status = request.json.get('status')  # Get the new status from the request
+        mongo.db.quiz_rooms.update_one(
+            {'room_number': room_number},
+            {'$set': {'status': new_status}}
+        )
+        return jsonify({'success': True})
+
+    return jsonify({'success': False, 'message': 'Invalid request method'})
 
 
 @app.route('/waiting_room/<room_number>', methods=['GET', 'POST'])
@@ -281,6 +298,7 @@ def join_room():
             return redirect(url_for('waiting_room_user', room_number=room_number))
         else:
             error = "Invalid Room Number. Please try again."
+            flash('Invalid Room Number. Please try again.', 'error')
             return render_template('join_room.html', error=error)
 
     return render_template('join_room.html')
@@ -332,6 +350,30 @@ def myscore(room_number):
 
     return redirect(url_for('login'))
 
+@app.route('/update_quiz_timer/<room_number>', methods=['POST'])
+@login_required
+def update_quiz_timer(room_number):
+    if request.method == 'POST':
+        new_timer = request.json.get('timer')  # Get the new timer from the request
+        mongo.db.quiz_rooms.update_one( 
+            {'room_number': room_number},
+            {'$set': {'timer': new_timer}}
+        )
+        return jsonify({'success': True})
+    
+    return jsonify({'success': False, 'message': 'Invalid request method'})
+
+
+    
+@app.route('/get_quiz_timer/<room_number>')
+def get_quiz_timer(room_number):
+
+    room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    timer = room_data.get('timer', 0)
+
+    # Return the timer value as JSON
+    return jsonify({'timer': timer})
+
 @app.route('/quiz_results/<room_number>')
 @login_required
 def quiz_results(room_number):
@@ -344,6 +386,8 @@ def quiz_results(room_number):
         if current_user != quiz_master:
             flash('Only the quiz master can view the quiz results.', 'error')
             return redirect(url_for('menu'))  
+        
+        # add timer logic
 
         # Retrieve participant's submitted answers (replace this with your actual logic)
         participants = room_data.get('participants', [])
@@ -415,6 +459,14 @@ def calculate_score(participant_answers, questions):
 @login_required
 def quiz_room(room_number):
     room_data = mongo.db.quiz_rooms.find_one({'room_number': room_number})
+    
+    print(room_data)
+
+    # check if room is close in mongodb
+    if room_data['status'] == 'closed':
+        return render_template('room_closed.html')
+    
+
 
     if room_data:
         quiz_master = room_data['quiz_master']

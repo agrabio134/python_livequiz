@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,35 +13,45 @@
         .question-container.active {
             display: block;
         }
+
+        #timer {
+            font-size: 20px;
+            margin-top: 10px;
+        }
     </style>
+    <!-- swal -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 </head>
+
 <body>
     <h1>Quiz Room</h1>
     <p>Room Number: {{ room_number }}</p>
     <p>Quiz Master: {{ quiz_master }}</p>
 
+    <!-- Display the timer -->
+    <div id="timer"></div>
+
     <!-- Fetch questions from the room_data variable -->
     {% if room_data.questions %}
-        <h2>{{ room_data.quiz_name }} </h2>
-        <h3>Category: {{ room_data.categories }}</h3>
-        <form action="{{ url_for('submit_answers', room_number=room_number) }}" method="post" id="quizForm">
+    <h2>{{ room_data.quiz_name }}</h2>
+    <h3>Category: {{ room_data.categories }}</h3>
+    <form action="{{ url_for('submit_answers', room_number=room_number) }}" method="post" id="quizForm">
         <input type="hidden" name="participant" value="{{ session['username'] }}">
 
-
-
         {% for question_index in range(room_data.questions|length) %}
-            {% set question = room_data.questions[question_index] %}
-            <div class="question-container {% if question_index == 0 %}active{% endif %}" data-index="{{ question_index }}">
-                <h3>Question {{ question_index + 1 }}</h3>
-                <p>{{ question.question_text }}</p>
+        {% set question = room_data.questions[question_index] %}
+        <div class="question-container {% if question_index == 0 %}active{% endif %}" data-index="{{ question_index }}">
+            <h3>Question {{ question_index + 1 }}</h3>
+            <p>{{ question.question_text }}</p>
 
-                {% for option_index in range(question.options|length) %}
-                    {% set option = question.options[option_index] %}
-                    <p>
-                        <input type="radio" name="answer_{{ question_index }}" value="{{ option }}"> {{ option }}
-                    </p>
-                {% endfor %}
-            </div>
+            {% for option_index in range(question.options|length) %}
+            {% set option = question.options[option_index] %}
+            <p>
+                <input type="radio" name="answer_{{ question_index }}" value="{{ option }}"> {{ option }}
+            </p>
+            {% endfor %}
+        </div>
         {% endfor %}
 
         <button type="button" onclick="showBack()">Back</button>
@@ -48,10 +59,62 @@
         <button type="submit" style="display: none;">Submit Answers</button>
     </form>
     {% else %}
-        <p>No quiz questions available.</p>
+    <p>No quiz questions available.</p>
     {% endif %}
 
     <script>
+        let timerValue = {{ room_data.timer }};
+        let timerInterval;
+
+        function updateTimerDisplay() {
+            document.getElementById('timer').innerText = 'Time Remaining: ' + timerValue + ' seconds';
+        }
+
+        function startTimer() {
+            updateTimerDisplay();
+            timerInterval = setInterval(function () {
+                timerValue--;
+                updateTimerDisplay();
+
+                if (timerValue <= 0) {
+                    clearInterval(timerInterval);
+                    // Perform actions when the timer reaches zero
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Quiz Timer Expired',
+                        text: 'The quiz has ended.',
+                        showConfirmButton: false
+                    });
+
+                    let quiz_room_number = {{ room_number }};
+
+                    // Update the quiz status using AJAX
+                    fetch(`/update_quiz_status/${quiz_room_number}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ status: 'closed' }), // Update the status as needed
+                    })
+                        .then(response => {
+                            if (response.ok) {
+                                // Redirect to another page or handle accordingly
+                                window.location.href = '/quiz_results/' + quiz_room_number;
+                            } else {
+                                // Handle error response
+                                console.error('Failed to update quiz status.');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error updating quiz status:', error);
+                        });
+                }
+            }, 1000);
+        }
+
+        // Call the startTimer function when the page loads
+        startTimer();
+
         function showNext() {
             const currentQuestionIndex = document.querySelector('.question-container.active').getAttribute('data-index');
             const nextQuestionIndex = parseInt(currentQuestionIndex) + 1;
@@ -79,9 +142,10 @@
                 document.querySelector('[type="submit"]').style.display = 'none';
                 document.querySelector('.nextBtn').style.display = 'inline-block';
             } else {
-                    
+                // Handle when going back from the first question
             }
         }
     </script>
 </body>
+
 </html>

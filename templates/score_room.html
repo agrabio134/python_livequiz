@@ -1,3 +1,5 @@
+<!-- quiz_results.html -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,6 +11,8 @@
     <h1>Quiz Score Room - Room {{ room_number }}</h1>
 
     <h2>Quiz Results</h2>
+
+    <p id="quiz-timer">Quiz Time: <span id="timer-value"></span></p>
 
     <table border="1">
         <thead>
@@ -28,6 +32,7 @@
     <script>
         var socket = io.connect('http://' + document.domain + ':' + location.port);
         var room_number = '{{ room_number }}';  // Make sure to have room_number available
+        var remainingTime = 0;
 
         function updateQuizResults() {
             fetch('/get_scores/' + room_number)
@@ -78,7 +83,56 @@
         // Update every 1 second
         setInterval(updateQuizResults, 1000);
 
-        // ... your existing socket.on('update_scores') code here
+        // Add script to update quiz timer
+        function updateQuizTimer() {
+            fetch('/get_quiz_timer/' + room_number)
+                .then(response => response.json())
+                .then(data => {
+                    remainingTime = data.timer;
+                    updateTimerDisplay();
+                })
+                .catch(error => console.error('Error updating quiz timer:', error));
+        }
+
+        // Initial update
+        updateQuizTimer();
+
+        // Function to update the timer display
+        function updateTimerDisplay() {
+            var timerDisplay = document.getElementById('timer-value');
+            var minutes = Math.floor(remainingTime / 60);
+            var seconds = remainingTime % 60;
+            timerDisplay.innerText = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+
+            // Countdown the timer
+            remainingTime--;
+
+            // Stop the countdown when it reaches 0
+            if (remainingTime < 0) {
+                clearInterval(timerInterval);
+            }
+        }
+
+        // Update timer display every 1 second
+        var timerInterval = setInterval(updateTimerDisplay, 1000);
+
+        // Send the updated timer value to the server every 1 second
+        setInterval(() => {
+            fetch('/update_quiz_timer/' + room_number, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ timer: remainingTime })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Error updating quiz timer on the server:', data.message);
+                }
+            })
+            .catch(error => console.error('Error updating quiz timer on the server:', error));
+        }, 1000);
     </script>
 </body>
 </html>

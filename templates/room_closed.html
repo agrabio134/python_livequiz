@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Room Closed</title>
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+
+        #redirect-message {
+            font-size: 20px;
+        }
+
+        #loading-indicator {
+            display: inline-block;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-top: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <!-- swal -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+    <div id="redirect-message">
+        The quiz room has been closed. Redirecting to the menu in <span id="countdown"></span> seconds.
+    </div>
+    <div id="loading-indicator"></div>
+
+    <script>
+        // Set the countdown duration in seconds
+        var countdownDuration = 5;
+
+        // Display initial countdown value
+        document.getElementById('countdown').innerText = countdownDuration;
+
+        // Update countdown every second
+        var countdownInterval = setInterval(function () {
+            countdownDuration--;
+            document.getElementById('countdown').innerText = countdownDuration;
+
+            // Redirect to the menu page when countdown reaches 0
+            if (countdownDuration === 0) {
+                clearInterval(countdownInterval);
+                // swal
+                Swal.fire({
+                    icon: "info",
+                    title: "Redirecting to the menu...",
+                    showConfirmButton: false,
+                    timer: 1000,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                }).then(() => {
+                    window.location.href = "{{ url_for('menu') }}";
+                });
+                
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

@@ -14,7 +14,7 @@ from flask import flash
 
 
 app = Flask(__name__)
-app.config['MONGO_URI'] = 'mongodb+srv://testonlytest7:76HdaZzXXgSqb4HN@learnapi.ftvefwf.mongodb.net/db_quizz_app?retryWrites=true&w=majority'
+app.config['MONGO_URI'] = 'mongodb+srv://202010364:OoYBoHtBbk8nwGcH@pythonlivequiz.qixoc.mongodb.net/db_quizz_app?retryWrites=true&w=majority'
 app.secret_key = 'your_secret_key'
 mongo = PyMongo(app)
 socketio = SocketIO(app)
@@ -25,14 +25,16 @@ app.config['JWT_SECRET_KEY'] = secret_key
 
 
 def generate_jwt_token(username):
+    secret_key = 'your_secret_key'
     payload = {
         'exp': datetime.utcnow() + timedelta(days=1),
         'iat': datetime.utcnow(),
         'sub': username
     }
-    token = jwt.encode(payload, app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    token = jwt.encode(payload, secret_key, algorithm='HS256')
     return token
-    
+
+
 
 def login_required(f):
     @wraps(f)

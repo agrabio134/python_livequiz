@@ -1,0 +1,1 @@
+This project is a real-time quiz application built with Python, Flask, MongoDB, and Socket.IO. It allows users to create and join quiz rooms, submit answers, and view scores. The app supports roles like quiz master and participant, with real-time updates and interactions, including kicking users, managing quiz timers, and tracking participant scores.
